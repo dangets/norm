@@ -1,5 +1,7 @@
 package com.dangets.norm
 
+import java.time.Instant
+
 sealed class FileModel {
     abstract val numHeaderLines: Int
     abstract val numFooterLines: Int
@@ -56,6 +58,18 @@ data class ColumnTypeFloat(val format: String = "",
 data class ColumnTypeDate(val format: String = "yyyy-MM-dd",
                           override val nullValues: List<String> = listOf()): ColumnType()
 
+
+
+data class VersionInfo(
+        val id: Int,
+        val version: Int,
+        val description: String,
+        val tsCreated: Instant,
+        val user: String,
+        val notes: String
+)
+
+data class VersionedFileModel(val fileModel: FileModel, val versionInfo: VersionInfo)
 
 
 fun main(args: Array<String>) {
