@@ -19,10 +19,6 @@
     </properties>
 
     <repositories>
-<!--        <repository>
-            <id>ktor</id>
-            <url>http://dl.bintray.com/kotlin/ktor</url>
-        </repository>-->
         <repository>
             <id>kotlinx</id>
             <url>http://dl.bintray.com/kotlin/kotlinx</url>
@@ -83,6 +79,12 @@
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-afterburner</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>4.1</version>
         </dependency>
 
         <dependency>
