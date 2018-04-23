@@ -1,4 +1,4 @@
-package com.dangets.norm
+package com.dangets.norm.ws
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonSubTypes
@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.module.afterburner.AfterburnerModule
 
 
 @JsonTypeInfo(
@@ -19,28 +20,29 @@ import com.fasterxml.jackson.databind.SerializationFeature
     Type(value = FixedWidthFileModelDto::class, name = "fixed")
 )
 sealed class FileModelDto {
-    abstract val numHeaderLines: Int
-    abstract val numFooterLines: Int
+    abstract var numHeaderLines: Int
+    abstract var numFooterLines: Int
 }
 
-data class CsvFileModelDto(override val numHeaderLines: Int = 0,
-                           override val numFooterLines: Int = 0,
-                           val delimiter: String = ",",
-                           val columns: List<Column> = listOf()) : FileModelDto() {
+data class CsvFileModelDto(override var numHeaderLines: Int = 0,
+                           override var numFooterLines: Int = 0,
+                           var delimiter: String = ",",
+                           var columns: List<Column> = listOf()) : FileModelDto() {
 
     data class Column(var name: String = "undefined",
                       var type: ColumnTypeDto = ColumnTypeStringDto(),
                       var isIdentifier: Boolean? = null)
 }
 
-data class FixedWidthFileModelDto(override val numHeaderLines: Int,
-                                  override val numFooterLines: Int,
-                                  val columns: List<Column>) : FileModelDto() {
-    data class Column(val name: String,
-                      val offset: Int,
-                      val width: Int,
-                      val type: ColumnTypeDto,
-                      val isIdentifier: Boolean? = null)
+data class FixedWidthFileModelDto(override var numHeaderLines: Int = 0,
+                                  override var numFooterLines: Int = 0,
+                                  var columns: List<Column> = listOf()) : FileModelDto() {
+
+    data class Column(var name: String = "undefined",
+                      var offset: Int = 0,
+                      var width: Int = 0,
+                      var type: ColumnTypeDto = ColumnTypeStringDto(),
+                      var isIdentifier: Boolean? = null)
 }
 
 @JsonTypeInfo(
@@ -80,6 +82,8 @@ fun main(args: Array<String>) {
     println(csv)
 
     val om = ObjectMapper().apply {
+        registerModule(AfterburnerModule())
+
         setSerializationInclusion(JsonInclude.Include.NON_NULL)
         configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         configure(SerializationFeature.INDENT_OUTPUT, true)
@@ -91,5 +95,4 @@ fun main(args: Array<String>) {
     println(csv2)
 
     println(csvJson)
-
 }

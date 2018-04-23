@@ -1,5 +1,19 @@
 package com.dangets.norm
 
+import java.time.Instant
+import java.time.LocalDate
+
+data class VersionedFileModel(
+        val fileId: Long,
+        val versionId: Long,
+        val active: Boolean,
+        val activeReconDate: LocalDate,
+        val inactiveReconDate: LocalDate?,
+        val tsCreated: Instant,
+        val createdBy: String,
+        val fileModel: FileModel
+)
+
 sealed class FileModel {
     abstract val numHeaderLines: Int
     abstract val numFooterLines: Int
