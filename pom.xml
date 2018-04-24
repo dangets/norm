@@ -47,23 +47,11 @@
             <version>6.4.0.jre8</version>
         </dependency>
 
-<!--
         <dependency>
-            <groupId>io.ktor</groupId>
-            <artifactId>ktor-server-core</artifactId>
-            <version>${ktor.version}</version>
+            <groupId>com.sparkjava</groupId>
+            <artifactId>spark-kotlin</artifactId>
+            <version>1.0.0-alpha</version>
         </dependency>
-        <dependency>
-            <groupId>io.ktor</groupId>
-            <artifactId>ktor-server-netty</artifactId>
-            <version>${ktor.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.ktor</groupId>
-            <artifactId>ktor-jackson</artifactId>
-            <version>${ktor.version}</version>
-        </dependency>
--->
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -116,11 +104,13 @@
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>
                 <version>${kotlin.version}</version>
+                <!--
                 <configuration>
                     <args>
                         <arg>-Xcoroutines=enable</arg>
                     </args>
                 </configuration>
+                -->
                 <executions>
                     <execution>
                         <id>compile</id>
