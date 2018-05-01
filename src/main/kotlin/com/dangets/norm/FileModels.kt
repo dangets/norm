@@ -3,12 +3,13 @@ package com.dangets.norm
 import java.time.Instant
 import java.time.LocalDate
 
+typealias VersionId = Long
+
 data class VersionedFileModel(
-        val fileId: Long,
-        val versionId: Long,
+        val fileId: Int,
+        val versionId: VersionId,
         val active: Boolean,
         val activeReconDate: LocalDate,
-        val inactiveReconDate: LocalDate?,
         val tsCreated: Instant,
         val createdBy: String,
         val fileModel: FileModel

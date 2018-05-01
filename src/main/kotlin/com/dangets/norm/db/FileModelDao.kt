@@ -32,7 +32,6 @@ class FileModelDaoImpl(private val ds: DataSource) : FileModelDao {
                 versionId = versionInfo.versionId,
                 active = versionInfo.active,
                 activeReconDate = versionInfo.activeReconDate,
-                inactiveReconDate = null,
                 tsCreated = versionInfo.tsCreated,
                 createdBy = versionInfo.createdBy,
                 fileModel = fileModel
@@ -165,7 +164,7 @@ class FileModelDaoImpl(private val ds: DataSource) : FileModelDao {
     }
 
     data class DbVersionInfo(
-            val fileId: Long,
+            val fileId: Int,
             val versionId: Long,
             val active: Boolean,
             val activeReconDate: LocalDate,
@@ -175,7 +174,7 @@ class FileModelDaoImpl(private val ds: DataSource) : FileModelDao {
     companion object {
         fun adaptVersionInfo(dbFm: DbFileModel): DbVersionInfo =
                 DbVersionInfo(
-                    fileId = dbFm.fileId.toLong(),
+                    fileId = dbFm.fileId,
                     versionId = dbFm.versionId.toLong(),
                     tsCreated = dbFm.tsCreated,
                     activeReconDate = dbFm.activeReconDate,
