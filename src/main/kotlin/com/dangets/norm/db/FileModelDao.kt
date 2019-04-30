@@ -7,7 +7,6 @@ import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import javax.sql.DataSource
 
 interface FileModelDao {
@@ -247,17 +246,19 @@ class FileModelDaoImpl(private val ds: DataSource) : FileModelDao {
 }
 
 private val GLOBAL_DATE_ZERO = LocalDate.of(1999, 12, 31)
+private val GLOBAL_DATE_ZERO_EPOCH_DAY = GLOBAL_DATE_ZERO.toEpochDay()
 
 private fun ResultSet.getGlobalDate(columnLabel: String): LocalDate? {
     val dayNum = getInt(columnLabel)
     if (dayNum == 0 && wasNull())
         return null
 
-    return GLOBAL_DATE_ZERO.plusDays(dayNum.toLong())
+    return LocalDate.ofEpochDay(GLOBAL_DATE_ZERO_EPOCH_DAY + dayNum)
 }
 
 private fun PreparedStatement.setGlobalDate(parameterIndex: Int, date: LocalDate) {
-    val globalDayNum = ChronoUnit.DAYS.between(GLOBAL_DATE_ZERO, date).toInt()
+    val epochDate = date.toEpochDay()
+    val globalDayNum = (epochDate - GLOBAL_DATE_ZERO_EPOCH_DAY).toInt()
     setInt(parameterIndex, globalDayNum)
 }
 

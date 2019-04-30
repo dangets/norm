@@ -1,65 +1,98 @@
 package com.dangets.norm
 
-import com.google.common.eventbus.EventBus
+import io.reactivex.Flowable
+import io.reactivex.Single
+import io.reactivex.rxkotlin.toFlowable
+import io.reactivex.subjects.PublishSubject
 import java.time.Instant
 import java.time.LocalDate
 import java.util.*
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+sealed class CommandOrEvent<C, E> { abstract val id: UUID }
+data class Command<T>(override val id: UUID, val value: T) : CommandOrEvent<T, Nothing>()
+data class Event<T>(override val id: UUID, val value: T) : CommandOrEvent<Nothing, T>()
+
+sealed class FileModelEvent {
+    data class FileModelCreated(val value: VersionedFileModel) : FileModelEvent()
+    data class FileModelInactivated(val versionId: VersionId) : FileModelEvent()
+    data class FileModelCommandRejected(val cmd: FileModelCommand, val reason: String) : FileModelEvent()
+}
+
+
 sealed class FileModelCommand {
-    abstract val id: UUID
     abstract val username: String
     abstract val note: String
-}
-data class CreateFileModel(override val username: String,
-                           override val note: String,
-                           val fileId: Int,
-                           val activeReconDate: LocalDate,
-                           val active: Boolean,
-                           val fileModel: FileModel,
-                           override val id: UUID = UUID.randomUUID()) : FileModelCommand()
 
-data class UpdateFileModel(override val username: String,
-                           override val note: String,
-                           val versionId: VersionId,
-                           val activeReconDate: LocalDate?,
-                           val active: Boolean?,
-                           override val id: UUID = UUID.randomUUID()) : FileModelCommand()
+    data class CreateFileModel(override val username: String,
+                               override val note: String,
+                               val fileId: Int,
+                               val activeReconDate: LocalDate,
+                               val active: Boolean,
+                               val fileModel: FileModel) : FileModelCommand()
 
-
-sealed class FileModelEvent
-data class FileModelCreated(val value: VersionedFileModel) : FileModelEvent()
-data class FileModelUpdated(val value: VersionedFileModel) : FileModelEvent()
-data class FileModelCommandRejected(val cmd: FileModelCommand, val reason: String) : FileModelEvent()
-
-
-
-interface FileModelService {
-    // Commands ---------------
     /**
-     * By default deactivate all other fileModels for this same fileId for given range?
+     * Create a new file model version from existing file model version.
+     * Original file model version will be inactivated.
      */
-    fun createFileModel(cmd: CreateFileModel): CompletableFuture<Result<VersionId, String>>
+    data class UpdateFileModel(override val username: String,
+                               override val note: String,
+                               val versionId: VersionId,
+                               val activeReconDate: LocalDate,
+                               val active: Boolean,
+                               val fileModel: FileModel) : FileModelCommand()
 
-    fun updateFileModel(cmd: UpdateFileModel): CompletableFuture<Result<Boolean, String>>
+    data class SetActiveReconDate(override val username: String,
+                                  override val note: String,
+                                  val versionId: VersionId,
+                                  val activeReconDate: LocalDate) : FileModelCommand()
 
-    // Queries ----------------
-
-    fun getFileModel(versionId: VersionId): CompletableFuture<VersionedFileModel?>
-
-    fun getFileModel(fileId: Int, reconDate: LocalDate): CompletableFuture<VersionedFileModel?>
-
-    fun getFileModelVersions(fileId: Int): CompletableFuture<List<VersionedFileModel>>
+    data class InactivateFileModel(override val username: String,
+                                   override val note: String,
+                                   val versionId: VersionId) : FileModelCommand()
 }
 
+interface FileModelCommandApi {
+    fun post(cmd: FileModelCommand): Single<UUID>
 
-class FileModelServiceImpl(private val eventBus: EventBus) : FileModelService {
+    //fun postSync(cmd: FileModelCommand)
+    //fun subscribe(): Flowable<CommandOrEvent<FileModelCommand, FileModelEvent>>
+}
+
+class FileModelCommandApiImpl(private val cmdBus: PublishSubject<Command<FileModelCommand>>): FileModelCommandApi {
+    override fun post(cmd: FileModelCommand): Single<UUID> {
+        val id = UUID.randomUUID()
+        val c = Command(id, cmd)
+        println("cmdApi: posting to cmdBus $c")
+        cmdBus.onNext(c)
+        return Single.just(id)
+    }
+}
+
+class FileModelCommandProcessor(cmdBus: PublishSubject<Command<FileModelCommand>>,
+                                private val eventBus: PublishSubject<Event<FileModelEvent>>) {
     private val nextVersionId = AtomicLong(0)
     private val store = ConcurrentHashMap<VersionId, VersionedFileModel>()
 
-    override fun createFileModel(cmd: CreateFileModel): CompletableFuture<Result<VersionId, String>> {
+    init {
+        cmdBus.subscribe(this::onCmd)
+    }
+
+    private fun postEvent(event: FileModelEvent) {
+        val uuid = UUID.randomUUID()
+        println("processor: posting to eventBus $event")
+        eventBus.onNext(Event(uuid, event))
+    }
+
+    fun onCmd(cmd: Command<FileModelCommand>) {
+        println("processor: received $cmd")
+        when (cmd.value) {
+            is FileModelCommand.CreateFileModel -> onCreateFileModel(cmd.value)
+        }
+    }
+
+    private fun onCreateFileModel(cmd: FileModelCommand.CreateFileModel) {
         val id = nextVersionId.getAndIncrement()
         val vfm = VersionedFileModel(
                 fileId = cmd.fileId,
@@ -70,46 +103,59 @@ class FileModelServiceImpl(private val eventBus: EventBus) : FileModelService {
                 createdBy = cmd.username,
                 fileModel = cmd.fileModel)
 
-        return CompletableFuture.supplyAsync {
-            eventBus.post(FileModelCreated(vfm))
-            store[id] = vfm
-            Result.Ok<VersionId, String>(id)
+        store[id] = vfm
+        postEvent(FileModelEvent.FileModelCreated(vfm))
+    }
+}
+
+class FileModelView(eventBus: PublishSubject<Event<FileModelEvent>>) {
+    private val store = ConcurrentHashMap<VersionId, VersionedFileModel>()
+
+    init {
+        eventBus.subscribe(this::onEvent)
+    }
+
+    private fun onEvent(event: Event<FileModelEvent>) {
+        println("view: received $event")
+        when (event.value) {
+            is FileModelEvent.FileModelCreated -> onFileModelCreated(event.value)
         }
     }
 
-    override fun updateFileModel(cmd: UpdateFileModel): CompletableFuture<Result<Boolean, String>> {
-        val vfm = store[cmd.versionId]
-        if (vfm == null) {
-            val error = "file model version ${cmd.versionId} not found"
-            eventBus.post(FileModelCommandRejected(cmd, error))
-            return CompletableFuture.completedFuture(Result.Err(error))
-        }
-
-        val updated = vfm.copy(active = cmd.active ?: vfm.active, activeReconDate = cmd.activeReconDate ?: vfm.activeReconDate)
-        // could check if updated == vfm
-
-        return CompletableFuture.supplyAsync {
-            eventBus.post(FileModelUpdated(updated))
-            store[updated.versionId] = updated
-            Result.Ok<Boolean, String>(true)
-        }
+    private fun onFileModelCreated(event: FileModelEvent.FileModelCreated) {
+        val vfm = event.value
+        store[vfm.versionId] = vfm
     }
 
-    override fun getFileModel(versionId: VersionId): CompletableFuture<VersionedFileModel?> {
-        return CompletableFuture.completedFuture(store[versionId])
-    }
+    fun getFileModels(): Flowable<VersionedFileModel> = store.values.toFlowable()
+}
 
-    override fun getFileModel(fileId: Int, reconDate: LocalDate): CompletableFuture<VersionedFileModel?> {
-        return getFileModelVersions(fileId)
-                .thenApply { fms ->
-                    fms.sortedByDescending { it.activeReconDate }
-                            .first { it.activeReconDate <= reconDate }
-                }
-    }
 
-    override fun getFileModelVersions(fileId: Int): CompletableFuture<List<VersionedFileModel>> {
-        return CompletableFuture.supplyAsync {
-            store.values.filter { it.fileId == fileId }
-        }
-    }
+fun main(args: Array<String>) {
+    val cmdBus = PublishSubject.create<Command<FileModelCommand>>()
+    val eventBus = PublishSubject.create<Event<FileModelEvent>>()
+
+    val fmView = FileModelView(eventBus)
+    val fmView2 = FileModelView(eventBus)
+    val fmView3 = FileModelView(eventBus)
+    val cmdProc = FileModelCommandProcessor(cmdBus, eventBus)
+    val cmdApi = FileModelCommandApiImpl(cmdBus)
+
+    println("1: " + fmView.getFileModels().toList().blockingGet())
+    cmdApi.post(FileModelCommand.CreateFileModel(
+            username = "dannygeorge",
+            note = "first commit",
+            fileId = 231,
+            activeReconDate = LocalDate.parse("2018-01-31"),
+            active = true,
+            fileModel = CsvFileModel(
+                    numHeaderLines = 1,
+                    numFooterLines = 0,
+                    delimiter = ",",
+                    columns = listOf(
+                            CsvFileModel.Column(name = "accountId", type = ColumnTypeInt(), isIdentifier = false)
+                    )
+            )
+    ))
+    println("2: " + fmView.getFileModels().toList().blockingGet())
 }
